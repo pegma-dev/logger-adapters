@@ -2,10 +2,10 @@
 
 ## Status
 
-**Stage:** packages implemented (tee, Application Insights, Cloudflare,
-Datadog); unpublished (`0.x`, public API unstable). Host wiring on
-RetireGolden and pegma.dev is the remaining consumer bar before first
-npm publish.
+**Stage:** `0.1.0` on npm (tee, Application Insights, Cloudflare, Datadog);
+trusted publishing configured; OIDC publish workflow in-repo. Public API
+unstable. Host tee wiring on RetireGolden and pegma.dev is the remaining
+consumer bar.
 
 **Named consumers (the extraction trigger, already fired):**
 
