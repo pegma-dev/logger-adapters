@@ -7,9 +7,9 @@ Thin implementations of the [`@pegma/spine`](https://github.com/pegma-dev/spine)
 and Datadog — plus a small tee for multi-sink wiring.
 
 > [!IMPORTANT]
-> Logger Adapters is in early `0.x` planning. Its public API is not stable,
-> its packages are not published, and it is not ready for production use.
-> See [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md).
+> Logger Adapters is in early `0.x` development. Its packages are
+> implemented and tested but not published, and the public API is not
+> stable. See [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md).
 
 ## What this is (and is not)
 

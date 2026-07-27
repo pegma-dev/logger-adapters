@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/logger-tee" },
+    { "path": "./packages/logger-applicationinsights" },
+    { "path": "./packages/logger-cloudflare" },
+    { "path": "./packages/logger-datadog" }
+  ]
+}

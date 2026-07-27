@@ -2,8 +2,10 @@
 
 ## Status
 
-**Stage:** planning; packages unpublished
-(`0.x`, public API unstable)
+**Stage:** packages implemented (tee, Application Insights, Cloudflare,
+Datadog); unpublished (`0.x`, public API unstable). Host wiring on
+RetireGolden and pegma.dev is the remaining consumer bar before first
+npm publish.
 
 **Named consumers (the extraction trigger, already fired):**
 
@@ -15,7 +17,7 @@
 
 Both hosts share Datadog as the second sink via `@pegma/logger-tee`.
 That pair is Pegma's dual-environment claim for logging: two primary
-cloud sinks, one common Datadog view. Waiting for a *third* site before
+cloud sinks, one common Datadog view. Waiting for a _third_ site before
 publishing adapters would strand both reference environments on one-off
 composition-root code — the opposite of the portability story.
 
@@ -78,12 +80,12 @@ the caller's object.
 
 ### Packages
 
-| Package | Role | First consumer |
-| --------------------------------------- | ------------------------------------------- | -------------- |
-| `@pegma/logger-tee` | Fan-out `Logger` over N sinks | both reference hosts (required for Datadog) |
-| `@pegma/logger-applicationinsights` | Spine `Logger` → Application Insights | RetireGolden (teed with Datadog) |
-| `@pegma/logger-cloudflare` | Spine `Logger` → Workers structured logs | pegma.dev (teed with Datadog) |
-| `@pegma/logger-datadog` | Spine `Logger` → Datadog logs | **both** sites, always via the tee |
+| Package                             | Role                                     | First consumer                              |
+| ----------------------------------- | ---------------------------------------- | ------------------------------------------- |
+| `@pegma/logger-tee`                 | Fan-out `Logger` over N sinks            | both reference hosts (required for Datadog) |
+| `@pegma/logger-applicationinsights` | Spine `Logger` → Application Insights    | RetireGolden (teed with Datadog)            |
+| `@pegma/logger-cloudflare`          | Spine `Logger` → Workers structured logs | pegma.dev (teed with Datadog)               |
+| `@pegma/logger-datadog`             | Spine `Logger` → Datadog logs            | **both** sites, always via the tee          |
 
 No `@pegma/logging-core`. Shared helpers (safe field scrubbing, level
 maps), if any, stay private to the repo or live as non-exported modules —

@@ -32,7 +32,7 @@ what makes "both sites" one consumer story instead of two one-offs.
 
 After the tee (Phase 1) and in parallel with or immediately after the
 primary-sink adapters (Phases 2–3): both composition roots need Datadog
-as the *second* arm of the tee, so `@pegma/logger-datadog` is on the
+as the _second_ arm of the tee, so `@pegma/logger-datadog` is on the
 critical path for "dual environment, one Datadog view," not a later
 wave waiting for an unnamed host. See `PROJECT_PLAN.md` Phase 4.
 
