@@ -460,7 +460,7 @@ export async function prepareRelease(options = {}) {
     cwd: root,
     capture: true,
   }).stdout.trim();
-  if (!/^[0-9a-f]{40}$/u.test(gitCommit)) {
+  if (!/^[0-9a-f]{40,64}$/u.test(gitCommit)) {
     fail(`git returned an invalid commit SHA: ${gitCommit}`);
   }
   const output = resolve(root, options.output ?? ".release");
@@ -552,7 +552,7 @@ async function verifyPreparedManifest(manifestPath) {
   const manifest = await readJson(manifestPath);
   if (
     manifest.schemaVersion !== 1 ||
-    !/^[0-9a-f]{40}$/u.test(manifest.gitCommit) ||
+    !/^[0-9a-f]{40,64}$/u.test(manifest.gitCommit) ||
     !/^v\d+\.\d+\.\d+$/u.test(manifest.releaseTag) ||
     !Array.isArray(manifest.packages) ||
     !sameJson(
