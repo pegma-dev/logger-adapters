@@ -17,12 +17,14 @@ Spine already defines logging: a one-method structured port
 (`log(level, message, fields?)`) and `noopLogger`. Components take a
 `Logger`; hosts supply one at the composition root. **This repository does
 not invent a logging core.** It publishes the boring adapters that map that
-port onto real sinks. First named consumers:
+port onto real sinks. Named consumers:
 
-- **RetireGolden** (Azure) → Application Insights
-- **pegma.dev** (Cloudflare) → Workers structured logs
-- **Datadog** → planned ([docs/DATADOG.md](docs/DATADOG.md)); ships when a
-  host pulls it (alone or teed with another sink)
+- **RetireGolden** (Azure) → Application Insights **and** Datadog (via tee)
+- **pegma.dev** (Cloudflare) → Workers structured logs **and** Datadog
+  (via tee)
+
+See [docs/DATADOG.md](docs/DATADOG.md): both sites are Datadog's first
+consumers; the primary cloud sink differs, the Datadog arm does not.
 
 Not here, on purpose: traces, metrics, APM agents, SIEM pipelines, or a
 Pegma-owned observability model. Those belong to OpenTelemetry (or the
@@ -33,9 +35,9 @@ lines.
 ## Multi-sink
 
 Spine accepts one `Logger`. Fan-out is composition: `@pegma/logger-tee`
-forwards each call to every sink. A host that wants Application Insights
-*and* Datadog wires both through the tee at the composition root — Spine
-never learns about either.
+forwards each call to every sink. Both reference hosts tee Datadog beside
+their primary sink (App Insights on RetireGolden, Cloudflare Logs on
+pegma.dev) — Spine never learns about either vendor.
 
 ## License
 

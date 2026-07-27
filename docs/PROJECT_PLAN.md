@@ -7,16 +7,17 @@
 
 **Named consumers (the extraction trigger, already fired):**
 
-1. **RetireGolden** — Azure reference application; needs a Spine `Logger`
-   that forwards to **Application Insights**.
-2. **pegma.dev** — Cloudflare second reference environment; needs a Spine
-   `Logger` that forwards to **Cloudflare Workers Logs** (structured
-   `console` / Workers observability), for the Phase 4 Workers consumer.
+1. **RetireGolden** — Azure reference application; Spine `Logger` →
+   **Application Insights**, teed with **Datadog**.
+2. **pegma.dev** — Cloudflare second reference environment; Spine
+   `Logger` → **Cloudflare Workers Logs**, teed with **Datadog**, for
+   the Phase 4 Workers consumer.
 
-These two hosts are Pegma's dual-environment claim made concrete. Waiting
-for a *third* site before publishing adapters would strand both reference
-environments on one-off composition-root code — the opposite of the
-portability story.
+Both hosts share Datadog as the second sink via `@pegma/logger-tee`.
+That pair is Pegma's dual-environment claim for logging: two primary
+cloud sinks, one common Datadog view. Waiting for a *third* site before
+publishing adapters would strand both reference environments on one-off
+composition-root code — the opposite of the portability story.
 
 **License:** MIT
 
@@ -79,10 +80,10 @@ the caller's object.
 
 | Package | Role | First consumer |
 | --------------------------------------- | ------------------------------------------- | -------------- |
-| `@pegma/logger-tee` | Fan-out `Logger` over N sinks | any multi-sink host |
-| `@pegma/logger-applicationinsights` | Spine `Logger` → Application Insights | RetireGolden |
-| `@pegma/logger-cloudflare` | Spine `Logger` → Workers structured logs | pegma.dev |
-| `@pegma/logger-datadog` | Spine `Logger` → Datadog logs | deferred until a host pulls it |
+| `@pegma/logger-tee` | Fan-out `Logger` over N sinks | both reference hosts (required for Datadog) |
+| `@pegma/logger-applicationinsights` | Spine `Logger` → Application Insights | RetireGolden (teed with Datadog) |
+| `@pegma/logger-cloudflare` | Spine `Logger` → Workers structured logs | pegma.dev (teed with Datadog) |
+| `@pegma/logger-datadog` | Spine `Logger` → Datadog logs | **both** sites, always via the tee |
 
 No `@pegma/logging-core`. Shared helpers (safe field scrubbing, level
 maps), if any, stay private to the repo or live as non-exported modules —
@@ -127,14 +128,15 @@ bootstrap the Application Insights SDK pass the client (or a narrow
 track-trace function) in; the adapter does not own instrumentation keys
 as globals unless unavoidable and documented.
 
-### Datadog is planned; implementation waits for a pull
+### Datadog is the shared second sink on both sites
 
-The assignment record is [DATADOG.md](DATADOG.md) — level mapping, injection
-shape, refusals, and test bar — so multi-sink design (App Insights **and**
-Datadog via the tee) is honest on paper. Package scaffolding and Phase work
-still start only when a composition root will import
-`@pegma/logger-datadog`. A plan without a consumer is fine; an unpublished
-SDK wrapper without a consumer is not.
+The assignment record is [DATADOG.md](DATADOG.md). First consumers are
+**RetireGolden and pegma.dev together**, each wiring Datadog through the
+tee beside their primary sink (App Insights and Cloudflare Logs
+respectively). That is the consumer pull — not a later unnamed host.
+Package work follows the tee and lands with (or immediately after) the
+primary-sink adapters so both composition roots can go multi-sink in one
+season.
 
 ### Failures stay in the adapter
 
@@ -172,8 +174,9 @@ Monorepo under `packages/`:
   (`@pegma/spine` + Application Insights types/SDK as peer)
 - `packages/logger-cloudflare` → `@pegma/logger-cloudflare` (`@pegma/spine`;
   no Cloudflare npm SDK required if mapping to `console`)
-- `packages/logger-datadog` — directory reserved in the plan; not scaffolded
-  until pulled
+- `packages/logger-datadog` → `@pegma/logger-datadog`
+  (`@pegma/spine` + host-injected Datadog submit; peer SDK as the two
+  runtimes require)
 
 TypeScript, vitest, ecosystem-standard layout, SHA-pinned CI, publish via
 OIDC after the npm bootstrap publish rule (npm/cli#8544).
@@ -189,21 +192,24 @@ swallowed sink errors. Exit: tee usable against hand-written fake sinks.
 ### Phase 2 — Application Insights adapter
 
 `@pegma/logger-applicationinsights` mapping Spine levels to AI severities
-and fields to properties. Exit: RetireGolden can replace its composition-root
-bridge with the package (wiring PR is the consumer bar; may trail the
-publish).
+and fields to properties. Exit: RetireGolden can inject the package as
+one arm of `createTeeLogger(appInsights, datadog)` (Datadog arm may land
+in Phase 4 in the same wiring PR).
 
 ### Phase 3 — Cloudflare adapter
 
 `@pegma/logger-cloudflare` emitting structured lines suitable for Workers
-Logs. Exit: pegma.dev's Workers slice (Phase 4 of the site plan) can inject
-the adapter beside storage-cloudflare-d1.
+Logs. Exit: pegma.dev's Workers slice (Phase 4 of the site plan) can
+inject the adapter as one arm of `createTeeLogger(cloudflare, datadog)`.
 
-### Phase 4 — publish
+### Phase 4 — Datadog adapter + publish
 
-First public `0.x` for tee + Application Insights + Cloudflare, pinned to
-the Spine version verified in CI. Datadog publishes in a later wave when
-its named consumer pulls — see [DATADOG.md](DATADOG.md).
+`@pegma/logger-datadog` per [DATADOG.md](DATADOG.md). Exit: **both**
+reference composition roots tee Datadog beside their primary sink
+(RetireGolden: App Insights + Datadog; pegma.dev: Cloudflare + Datadog),
+and the four packages publish as public `0.x` pinned to the Spine version
+verified in CI. Datadog is not a later wave — both sites are its first
+consumers.
 
 ## Open questions
 
@@ -217,6 +223,11 @@ single JSON object (level, message, fields) so Logs parsing stays boring.
 Revisit only if a Workers observability feature requires a different
 channel for structured fields.
 
+**Workers Datadog intake.** pegma.dev on Workers may not run the Node
+Datadog agent. Lean: host injects an HTTP intake (or Workers-compatible)
+submit function; the adapter stays runtime-agnostic. Confirm in Phase 4
+against the real Workers composition root.
+
 **PII.** Should adapters offer a denylist of field keys? Lean **no** in
 v1 — hosts scrub before `log` or at the vendor. A denylist invites false
 confidence.
@@ -225,6 +236,8 @@ confidence.
 
 1. Repository scaffolding to the ecosystem standard (workspaces, CI,
    publish.yml).
-2. Phase 1 tee.
-3. Phase 2 Application Insights adapter driven by RetireGolden's wiring.
-4. Phase 3 Cloudflare adapter timed with pegma.dev's Workers consumer.
+2. Phase 1 tee — required before either site can wire Datadog as a
+   second sink.
+3. Phase 2 Application Insights (RetireGolden primary arm).
+4. Phase 3 Cloudflare (pegma.dev primary arm).
+5. Phase 4 Datadog + both sites' tee wiring + publish.

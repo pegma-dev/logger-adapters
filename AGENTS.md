@@ -46,9 +46,10 @@ discover secrets or own process-global singletons unless the vendor SDK
 requires it and the docs say so.
 
 **Add a sink package only when a named consumer pulls it.** Application
-Insights and Cloudflare are justified by the two reference environments.
-Datadog waits for a host that will wire it. Speculative adapters are scope
-creep.
+Insights, Cloudflare, and Datadog are justified by the two reference
+environments: each site's primary cloud sink, plus Datadog as the shared
+second sink on **both** via the tee. Further vendors wait for a host that
+will wire them. Speculative adapters are scope creep.
 
 ## Reference points
 

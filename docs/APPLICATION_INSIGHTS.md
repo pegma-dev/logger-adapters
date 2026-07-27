@@ -55,5 +55,7 @@ passthrough, undefined fields, and a throwing sink that must not escape
 
 ## What it unblocks
 
-RetireGolden can wire Pegma components to the same App Insights resource
-the rest of the application already uses, through one injected `Logger`.
+RetireGolden can wire Pegma components through
+`createTeeLogger(appInsightsLogger, datadogLogger)` so App Insights stays
+the Azure-native arm and Datadog receives the same Spine lines — see
+[DATADOG.md](DATADOG.md).

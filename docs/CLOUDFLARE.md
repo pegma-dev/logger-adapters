@@ -61,6 +61,8 @@ tail` during host integration.
 
 ## What it unblocks
 
-pegma.dev Phase 4: inject this `Logger` beside `@pegma/storage-cloudflare-d1`
-in the Workers composition root so operational lines from Pegma components
-land in the same place operators already look for Worker output.
+pegma.dev Phase 4: inject
+`createTeeLogger(cloudflareLogger, datadogLogger)` beside
+`@pegma/storage-cloudflare-d1` in the Workers composition root so
+operational lines land in Workers Logs **and** Datadog — see
+[DATADOG.md](DATADOG.md).

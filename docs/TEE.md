@@ -8,9 +8,10 @@ Planned. First phase of this repository — no vendor SDK, depends only on
 ## Why a tee exists
 
 Spine's `EventBus` and every component that accepts logging take **one**
-`Logger`. Hosts that want Application Insights *and* Datadog (or App
-Insights *and* a local console during bring-up) must not fork Spine or
-teach every component about fan-out.
+`Logger`. Both Pegma reference hosts tee Datadog beside their primary
+sink (RetireGolden: Application Insights + Datadog; pegma.dev: Cloudflare
+Logs + Datadog). They must not fork Spine or teach every component about
+fan-out.
 
 `createTeeLogger(...sinks)` is that composition helper: still one
 `Logger` at the injection site, N sinks behind it.
@@ -40,7 +41,7 @@ either).
 
 ## What it unblocks
 
-Multi-sink composition roots without growing Spine. Phase 1 of
-`docs/PROJECT_PLAN.md` ships this before vendor adapters so RetireGolden
-can tee App Insights with a temporary console sink during migration if
-needed.
+Both reference composition roots (and any multi-sink host) inject one
+`Logger` built with `createTeeLogger`. Phase 1 of `docs/PROJECT_PLAN.md`
+ships this before vendor adapters so RetireGolden and pegma.dev can tee
+Datadog beside App Insights and Cloudflare Logs without growing Spine.
