@@ -1,6 +1,6 @@
 {
   "name": "@pegma/logger-tee",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Fan-out @pegma/spine Logger over multiple sinks.",
   "license": "MIT",
   "type": "module",

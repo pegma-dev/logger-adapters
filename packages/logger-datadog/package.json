@@ -1,6 +1,6 @@
 {
   "name": "@pegma/logger-datadog",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Spine Logger adapter for Datadog logs.",
   "license": "MIT",
   "type": "module",
