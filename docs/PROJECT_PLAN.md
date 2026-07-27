@@ -29,6 +29,7 @@ Per-adapter assignment records:
 
 - [Application Insights](APPLICATION_INSIGHTS.md)
 - [Cloudflare Workers Logs](CLOUDFLARE.md)
+- [Datadog](DATADOG.md)
 - [Tee (multi-sink)](TEE.md)
 
 ## Vision
@@ -126,11 +127,14 @@ bootstrap the Application Insights SDK pass the client (or a narrow
 track-trace function) in; the adapter does not own instrumentation keys
 as globals unless unavoidable and documented.
 
-### Datadog waits for a pull
+### Datadog is planned; implementation waits for a pull
 
-Named in the package table so multi-sink design is honest, but Phase work
-starts only when a composition root will import it. Speculative Datadog
-support is refused.
+The assignment record is [DATADOG.md](DATADOG.md) — level mapping, injection
+shape, refusals, and test bar — so multi-sink design (App Insights **and**
+Datadog via the tee) is honest on paper. Package scaffolding and Phase work
+still start only when a composition root will import
+`@pegma/logger-datadog`. A plan without a consumer is fine; an unpublished
+SDK wrapper without a consumer is not.
 
 ### Failures stay in the adapter
 
@@ -197,8 +201,9 @@ the adapter beside storage-cloudflare-d1.
 
 ### Phase 4 — publish
 
-First public `0.x` for tee + the two sinks, pinned to the Spine version
-verified in CI. Datadog remains unplanned work until a host asks.
+First public `0.x` for tee + Application Insights + Cloudflare, pinned to
+the Spine version verified in CI. Datadog publishes in a later wave when
+its named consumer pulls — see [DATADOG.md](DATADOG.md).
 
 ## Open questions
 

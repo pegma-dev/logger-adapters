@@ -4,7 +4,7 @@
 
 Thin implementations of the [`@pegma/spine`](https://github.com/pegma-dev/spine)
 `Logger` port for real sinks — Application Insights, Cloudflare Workers Logs,
-and (later) Datadog — plus a small tee for multi-sink wiring.
+and Datadog — plus a small tee for multi-sink wiring.
 
 > [!IMPORTANT]
 > Logger Adapters is in early `0.x` planning. Its public API is not stable,
@@ -17,10 +17,12 @@ Spine already defines logging: a one-method structured port
 (`log(level, message, fields?)`) and `noopLogger`. Components take a
 `Logger`; hosts supply one at the composition root. **This repository does
 not invent a logging core.** It publishes the boring adapters that map that
-port onto the two reference environments Pegma already runs in:
+port onto real sinks. First named consumers:
 
 - **RetireGolden** (Azure) → Application Insights
 - **pegma.dev** (Cloudflare) → Workers structured logs
+- **Datadog** → planned ([docs/DATADOG.md](docs/DATADOG.md)); ships when a
+  host pulls it (alone or teed with another sink)
 
 Not here, on purpose: traces, metrics, APM agents, SIEM pipelines, or a
 Pegma-owned observability model. Those belong to OpenTelemetry (or the
