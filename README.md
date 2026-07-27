@@ -25,6 +25,9 @@ port onto real sinks. Named consumers:
 See [docs/DATADOG.md](docs/DATADOG.md): both sites are Datadog's first
 consumers; the primary cloud sink differs, the Datadog arm does not.
 
+Maintainer releases use npm trusted publishing and the signed-tag procedure in
+[docs/RELEASING.md](docs/RELEASING.md).
+
 Not here, on purpose: traces, metrics, APM agents, SIEM pipelines, or a
 Pegma-owned observability model. Those belong to OpenTelemetry (or the
 host) — not a second vocabulary beside Spine's `Logger`. Audit records are
