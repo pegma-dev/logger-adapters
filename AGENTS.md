@@ -56,3 +56,16 @@ will wire them. Speculative adapters are scope creep.
 The plan is `docs/PROJECT_PLAN.md`. The Spine `Logger` interface is the
 specification; every adapter's tests assert against that shape, not against
 vendor-specific surplus.
+
+## Workflow
+
+Work on a `claude/*` branch and open a pull request. The gate is
+`npm run format:check`, `npm run check`, `npm test` on Node 22 and 24.
+
+Publishing is trusted-publisher only; no tokens exist. Follow
+`docs/RELEASING.md`: create and push a signed annotated version tag already on
+`origin/main`, then publish the GitHub release for that existing tag. The
+workflow prepares and verifies all public packages without OIDC, preserves the
+reviewed package order, and gives OIDC only to the minimal environment-scoped
+job that publishes the exact prepared tarballs. Never add a token fallback or
+an unprotected manual publish path.
