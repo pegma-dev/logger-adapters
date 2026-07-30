@@ -66,9 +66,17 @@ Applications using these adapters remain responsible for:
   deletes, expires, or restricts what has already been emitted;
 - noting that the Cloudflare adapter writes to the Worker's `console`, so its
   lines inherit the account's Workers Logs retention and visibility;
-- accepting that a `fields` value the vendor cannot represent is coerced with
-  `JSON.stringify` (falling back to `String`), which can widen a nested
-  object into a single readable string.
+- knowing that a `fields` value the sink cannot represent is handled
+  differently by each adapter, so neither the coercion nor the log line is
+  guaranteed:
+  - `@pegma/logger-datadog` passes `null`, strings, numbers, and booleans
+    through and JSON-encodes anything else, falling back to `String(value)` if
+    that throws — a circular object becomes `"[object Object]"`;
+  - `@pegma/logger-applicationinsights` turns every value into a string, and
+    if `JSON.stringify` throws (a circular object, for example) the surrounding
+    `try/catch` drops that entire `log` call, not just the one field;
+  - `@pegma/logger-cloudflare` and `@pegma/logger-tee` hand `fields` to the
+    sink untouched, so the sink's own serialization applies.
 
 ## Release integrity
 
