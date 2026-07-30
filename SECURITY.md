@@ -70,11 +70,13 @@ Applications using these adapters remain responsible for:
   differently by each adapter, so neither the coercion nor the log line is
   guaranteed:
   - `@pegma/logger-datadog` passes `null`, strings, numbers, and booleans
-    through and JSON-encodes anything else, falling back to `String(value)` if
-    that throws — a circular object becomes `"[object Object]"`;
-  - `@pegma/logger-applicationinsights` turns every value into a string via
-    JSON encoding, falling back to `String(value)` if that throws — a circular
-    object becomes `"[object Object]"` and the trace is still emitted;
+    through and JSON-encodes anything else, falling back to `String(value)` —
+    a circular object becomes `"[object Object]"` — and to the fixed
+    placeholder `"[unserializable]"` if even that throws;
+  - `@pegma/logger-applicationinsights` passes strings through and
+    JSON-encodes anything else, with the same `String(value)` and
+    `"[unserializable]"` fallbacks, so an unserializable field degrades on
+    its own and the trace is still emitted;
   - `@pegma/logger-cloudflare` and `@pegma/logger-tee` hand `fields` to the
     sink untouched, so the sink's own serialization applies.
 

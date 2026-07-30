@@ -32,9 +32,16 @@ function toPropertyValue(value: unknown): string {
   }
   try {
     const json = JSON.stringify(value);
-    return json === undefined ? String(value) : json;
+    if (json !== undefined) {
+      return json;
+    }
   } catch {
+    // Fall through to String coercion below.
+  }
+  try {
     return String(value);
+  } catch {
+    return "[unserializable]";
   }
 }
 
