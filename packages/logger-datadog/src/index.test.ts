@@ -76,6 +76,33 @@ describe("createDatadogLogger", () => {
     expect(calls[0]?.attributes).not.toBe(fields);
   });
 
+  it("degrades an unserializable field without dropping the line", () => {
+    const { submit, calls } = recordingSubmit();
+    const logger = createDatadogLogger(submit);
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    // Circular, so JSON.stringify throws; null prototype, so String throws.
+    const hostile: Record<string, unknown> = Object.create(null) as Record<
+      string,
+      unknown
+    >;
+    hostile.self = hostile;
+
+    logger.log("info", "hello", { requestId: "abc", circular, hostile });
+
+    expect(calls).toEqual([
+      {
+        status: "info",
+        message: "hello",
+        attributes: {
+          requestId: "abc",
+          circular: "[object Object]",
+          hostile: "[unserializable]",
+        },
+      },
+    ]);
+  });
+
   it("omits attributes when fields are undefined", () => {
     const { submit, calls } = recordingSubmit();
     const logger = createDatadogLogger(submit);

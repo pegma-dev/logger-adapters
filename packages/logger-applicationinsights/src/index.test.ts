@@ -75,6 +75,44 @@ describe("createApplicationInsightsLogger", () => {
     });
   });
 
+  it("degrades an unserializable field without dropping the trace", () => {
+    const { trackTrace, calls } = recordingTrackTrace();
+    const logger = createApplicationInsightsLogger(trackTrace);
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+
+    logger.log("info", "hello", { requestId: "abc", circular });
+
+    expect(calls).toEqual([
+      {
+        message: "hello",
+        severity: 1,
+        properties: { requestId: "abc", circular: "[object Object]" },
+      },
+    ]);
+  });
+
+  it("uses a fixed placeholder when even String coercion throws", () => {
+    const { trackTrace, calls } = recordingTrackTrace();
+    const logger = createApplicationInsightsLogger(trackTrace);
+    // Circular, so JSON.stringify throws; null prototype, so String throws.
+    const hostile: Record<string, unknown> = Object.create(null) as Record<
+      string,
+      unknown
+    >;
+    hostile.self = hostile;
+
+    logger.log("info", "hello", { requestId: "abc", hostile });
+
+    expect(calls).toEqual([
+      {
+        message: "hello",
+        severity: 1,
+        properties: { requestId: "abc", hostile: "[unserializable]" },
+      },
+    ]);
+  });
+
   it("omits properties when fields are undefined", () => {
     const { trackTrace, calls } = recordingTrackTrace();
     const logger = createApplicationInsightsLogger(trackTrace);
