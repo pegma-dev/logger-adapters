@@ -29,6 +29,33 @@ function run(command: string, arguments_: string[], cwd?: string): string {
   }).trim();
 }
 
+function publishWorkflowJobs(): {
+  header: string;
+  prepare: string;
+  publish: string;
+  workflow: string;
+} {
+  const workflow = readFileSync(
+    join(process.cwd(), ".github", "workflows", "publish.yml"),
+    "utf8",
+  );
+  const jobsMarker = "\njobs:\n";
+  const jobsIndex = workflow.indexOf(jobsMarker);
+  expect(jobsIndex).toBeGreaterThanOrEqual(0);
+  const header = workflow.slice(0, jobsIndex);
+  const jobs = workflow.slice(jobsIndex + jobsMarker.length);
+  const prepareStart = jobs.indexOf("  prepare:");
+  const publishStart = jobs.indexOf("\n  publish:");
+  expect(prepareStart).toBeGreaterThanOrEqual(0);
+  expect(publishStart).toBeGreaterThan(prepareStart);
+  return {
+    header,
+    prepare: jobs.slice(prepareStart, publishStart),
+    publish: jobs.slice(publishStart),
+    workflow,
+  };
+}
+
 describe("release package metadata", () => {
   it("accepts npm's cross-platform argument separator", () => {
     expect(parseArguments(["--", "--output", ".release"])).toEqual({
@@ -141,22 +168,8 @@ describe("release source authentication", () => {
   });
 
   it("keeps preparation outside the OIDC-enabled publisher job", () => {
-    const workflow = readFileSync(
-      join(process.cwd(), ".github", "workflows", "publish.yml"),
-      "utf8",
-    );
-    const jobsMarker = "\njobs:\n";
-    const jobsIndex = workflow.indexOf(jobsMarker);
-    expect(jobsIndex).toBeGreaterThanOrEqual(0);
-    const header = workflow.slice(0, jobsIndex);
-    const jobs = workflow.slice(jobsIndex + jobsMarker.length);
-    const prepareStart = jobs.indexOf("  prepare:");
-    const publishStart = jobs.indexOf("\n  publish:");
+    const { header, prepare, publish, workflow } = publishWorkflowJobs();
     expect(header).not.toContain("id-token: write");
-    expect(prepareStart).toBeGreaterThanOrEqual(0);
-    expect(publishStart).toBeGreaterThan(prepareStart);
-    const prepare = jobs.slice(prepareStart, publishStart);
-    const publish = jobs.slice(publishStart);
     expect(prepare).not.toContain("id-token: write");
     expect(publish).toContain("id-token: write");
     expect(publish).not.toContain("npm ci");
@@ -164,6 +177,38 @@ describe("release source authentication", () => {
     expect(publish).toContain("npm run release:publish");
     expect(workflow).not.toContain("workflow_dispatch");
     expect(workflow).toContain("retention-days: 30");
+  });
+
+  it("verifies the prepared manifest against a pinned prepare-job output", () => {
+    const { prepare, publish } = publishWorkflowJobs();
+    expect(prepare).toContain(
+      "manifest-digest: ${{ steps.manifest-digest.outputs.manifest-digest }}",
+    );
+    expect(prepare).toContain(
+      'sha256sum .release/package-manifest.json | cut -d " " -f 1',
+    );
+    const verification = publish.indexOf(
+      "EXPECTED_MANIFEST_DIGEST: ${{ needs.prepare.outputs.manifest-digest }}",
+    );
+    expect(verification).toBeGreaterThanOrEqual(0);
+    expect(publish).toContain("sha256sum --check --strict --quiet");
+    expect(verification).toBeLessThan(
+      publish.indexOf("npm run release:publish"),
+    );
+  });
+
+  it("installs the reviewed npm release from a digest-pinned tarball", () => {
+    const { prepare } = publishWorkflowJobs();
+    const { packageManager } = JSON.parse(
+      readFileSync(join(process.cwd(), "package.json"), "utf8"),
+    ) as { packageManager: string };
+    const version = packageManager.replace(/^npm@/u, "");
+    expect(prepare).toContain(`NPM_VERSION: ${version}`);
+    expect(prepare).toContain(
+      "NPM_INTEGRITY: sha512-T67M4L5wNm0cZ7EBLErcEkY1SmzEW/WJ+SADBzsFUY1UdAPfFHXFQtZ6SEXiK0+vzXysCvAsepbMaBTwnrAD+w==",
+    );
+    expect(prepare).toContain('npm install --global "${tarball}"');
+    expect(prepare).not.toContain(`npm install --global npm@${version}`);
   });
 });
 

@@ -6,16 +6,17 @@
 
 ## Status
 
-Scan complete.
+Scan complete. All four findings were re-verified against the code and
+resolved on 2026-07-29; see the disposition on each finding below.
 
 ## Areas reviewed and found clear
 
-- **Published adapter source** (`packages/*/src/index.ts`): No `eval`, `new
-  Function`, `child_process`, filesystem, network, or `process.env` access.
-  Every `log` implementation wraps sink calls in `try/catch` and swallows
-  transport errors — the deliberate posture documented in `AGENTS.md` ("sink
-  failures must not take down the request"). No user input reaches a shell,
-  SQL, HTML, or a deserializer other than `JSON.stringify`.
+- **Published adapter source** (`packages/*/src/index.ts`): No `eval`,
+  `new Function`, `child_process`, filesystem, network, or `process.env`
+  access. Every `log` implementation wraps sink calls in `try/catch` and
+  swallows transport errors — the deliberate posture documented in `AGENTS.md`
+  ("sink failures must not take down the request"). No user input reaches a
+  shell, SQL, HTML, or a deserializer other than `JSON.stringify`.
 - **Prototype pollution:** `toProperties`/`toAttributes` assign
   attacker-controlled keys via bracket notation, but assigned values are
   always strings or primitives (`JSON.stringify` output), so a `__proto__`
@@ -27,9 +28,10 @@ Scan complete.
   files are gitignored. The only keys in tests are ephemeral SSH keys
   generated in `tmpdir` and deleted.
 - **CI/CD workflows:** All third-party actions are pinned to full commit
-  SHAs. Workflow permissions are minimal (`contents: read`); `id-token:
-  write` exists only in the protected `npm-publish` environment job — a
-  property enforced by a test (`tests/release-packages.test.ts:143`). No
+  SHAs. Workflow permissions are minimal (`contents: read`);
+  `id-token: write` exists only in the protected `npm-publish` environment
+  job — a property enforced by a test (`tests/release-packages.test.ts`, "keeps
+  preparation outside the OIDC-enabled publisher job"). No
   `pull_request_target`, no `workflow_dispatch` publish path, no token
   fallback. Event data used in `run:` steps flows through environment
   variables (quoted), not inline `${{ }}` interpolation; the tag name used
@@ -73,6 +75,14 @@ Scan complete.
   is low.
 - **Recommendation:** Pass `steps.upload.outputs.artifact-digest` as a job
   output from `prepare` and compare it after `download-artifact` in `publish`.
+- ✅ Resolved 2026-07-29 — `prepare` now pins the SHA-256 of
+  `.release/package-manifest.json` as a job output and `publish` verifies the
+  downloaded manifest against it before `release:publish` runs, so the manifest
+  that authenticates every tarball hash is itself checked against a value the
+  artifact cannot supply. The manifest digest is used rather than
+  `artifact-digest` because `download-artifact` extracts the zip, leaving no
+  archive bytes to re-hash, and the manifest already covers every published
+  tarball.
 
 ### 2. Low — Global npm install in release pipeline without integrity pinning
 
@@ -86,6 +96,11 @@ Scan complete.
   but not exfiltrate credentials.
 - **Recommendation:** Acceptable as-is for most threat models; could pin via
   a lockfile or verify a known dist hash.
+- ✅ Resolved 2026-07-29 — the step now downloads `npm-11.18.0.tgz`, compares
+  it against the reviewed `sha512-T67M4L5w…` integrity checked into the
+  workflow, installs those exact bytes, and asserts the resulting
+  `npm --version`; the pin is no longer the integrity npm resolves from the
+  registry's packument at run time.
 
 ### 3. Informational — No dependency-update automation or audit gate in CI
 
@@ -101,6 +116,11 @@ Scan complete.
   (`@pegma/spine@0.1.1`).
 - **Recommendation:** Add Dependabot (or run `npm audit --omit=dev` in CI)
   for continuous monitoring.
+- ✅ Resolved 2026-07-29 — added `.github/dependabot.yml` with monthly `npm`
+  and `github-actions` updates (development dependencies grouped), matching the
+  configuration already reviewed in `authorization-core` and `support-desk`. No
+  CI `npm audit` gate was added: a new advisory in an unrelated
+  devDependency would then block every pull request rather than open one.
 
 ### 4. Informational — No vulnerability disclosure policy
 
@@ -108,15 +128,19 @@ Scan complete.
 - **Exploitability:** N/A — process gap. Researchers have no documented
   channel to report vulnerabilities in the published `@pegma/*` packages.
 - **Recommendation:** Add a `SECURITY.md` with a disclosure contact.
+- ✅ Resolved 2026-07-29 — added `SECURITY.md` pointing at GitHub private
+  vulnerability reporting, with supported versions, the release-integrity
+  procedure, and the adapters' deliberate non-guarantees (no redaction, no
+  delivery guarantee) so those are not reported as vulnerabilities.
 
 ## Summary
 
-| # | Severity | Finding | Location |
-|---|----------|---------|----------|
-| 1 | Low | Artifact digest not verified across prepare/publish jobs | `.github/workflows/publish.yml:74-86, 113-120` |
-| 2 | Low | Global npm install without integrity pinning | `.github/workflows/publish.yml:57` |
-| 3 | Informational | No dependency-update automation or audit gate in CI | `.github/workflows/ci.yml`, `.github/` |
-| 4 | Informational | No vulnerability disclosure policy | repo root (missing `SECURITY.md`) |
+| #   | Severity      | Finding                                                  | Location                                       | Disposition            |
+| --- | ------------- | -------------------------------------------------------- | ---------------------------------------------- | ---------------------- |
+| 1   | Low           | Artifact digest not verified across prepare/publish jobs | `.github/workflows/publish.yml:74-86, 113-120` | ✅ Resolved 2026-07-29 |
+| 2   | Low           | Global npm install without integrity pinning             | `.github/workflows/publish.yml:57`             | ✅ Resolved 2026-07-29 |
+| 3   | Informational | No dependency-update automation or audit gate in CI      | `.github/workflows/ci.yml`, `.github/`         | ✅ Resolved 2026-07-29 |
+| 4   | Informational | No vulnerability disclosure policy                       | repo root (missing `SECURITY.md`)              | ✅ Resolved 2026-07-29 |
 
 **No high or medium severity vulnerabilities were found.** The repository's
 published attack surface is four thin adapter functions with no I/O, no
@@ -125,3 +149,7 @@ tags, trusted-publisher OIDC, and integrity verification. The two Low
 findings are defense-in-depth improvements to an already well-secured
 publish pipeline.
 
+All four were re-verified against the code and fixed on 2026-07-29; the two
+publish-pipeline changes are asserted by
+`tests/release-packages.test.ts`. Line numbers above refer to the pre-fix
+workflow.
