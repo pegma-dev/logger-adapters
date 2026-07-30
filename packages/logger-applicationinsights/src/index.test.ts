@@ -75,6 +75,23 @@ describe("createApplicationInsightsLogger", () => {
     });
   });
 
+  it("degrades an unserializable field without dropping the trace", () => {
+    const { trackTrace, calls } = recordingTrackTrace();
+    const logger = createApplicationInsightsLogger(trackTrace);
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+
+    logger.log("info", "hello", { requestId: "abc", circular });
+
+    expect(calls).toEqual([
+      {
+        message: "hello",
+        severity: 1,
+        properties: { requestId: "abc", circular: "[object Object]" },
+      },
+    ]);
+  });
+
   it("omits properties when fields are undefined", () => {
     const { trackTrace, calls } = recordingTrackTrace();
     const logger = createApplicationInsightsLogger(trackTrace);

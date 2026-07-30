@@ -72,9 +72,9 @@ Applications using these adapters remain responsible for:
   - `@pegma/logger-datadog` passes `null`, strings, numbers, and booleans
     through and JSON-encodes anything else, falling back to `String(value)` if
     that throws — a circular object becomes `"[object Object]"`;
-  - `@pegma/logger-applicationinsights` turns every value into a string, and
-    if `JSON.stringify` throws (a circular object, for example) the surrounding
-    `try/catch` drops that entire `log` call, not just the one field;
+  - `@pegma/logger-applicationinsights` turns every value into a string via
+    JSON encoding, falling back to `String(value)` if that throws — a circular
+    object becomes `"[object Object]"` and the trace is still emitted;
   - `@pegma/logger-cloudflare` and `@pegma/logger-tee` hand `fields` to the
     sink untouched, so the sink's own serialization applies.
 

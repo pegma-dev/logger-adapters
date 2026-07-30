@@ -30,8 +30,12 @@ function toPropertyValue(value: unknown): string {
   if (typeof value === "string") {
     return value;
   }
-  const json = JSON.stringify(value);
-  return json === undefined ? String(value) : json;
+  try {
+    const json = JSON.stringify(value);
+    return json === undefined ? String(value) : json;
+  } catch {
+    return String(value);
+  }
 }
 
 function toProperties(
