@@ -17,6 +17,8 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    outputs:
+      manifest-digest: ${{ steps.manifest-digest.outputs.manifest-digest }}
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name }}
       RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
@@ -53,8 +55,33 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
+      # The reviewed npm release is the only dependency of this job that npm ci
+      # cannot integrity-check, so pin its tarball digest here and install the
+      # exact bytes that were verified rather than a version the registry
+      # resolves at run time. NPM_VERSION must stay equal to the root
+      # packageManager pin, and NPM_INTEGRITY must be updated with it
+      # (npm view npm@<version> dist.integrity).
       - name: Use the reviewed npm release
-        run: npm install --global npm@11.18.0
+        shell: bash
+        env:
+          NPM_VERSION: 11.18.0
+          NPM_INTEGRITY: sha512-T67M4L5wNm0cZ7EBLErcEkY1SmzEW/WJ+SADBzsFUY1UdAPfFHXFQtZ6SEXiK0+vzXysCvAsepbMaBTwnrAD+w==
+        run: |
+          tarball="${RUNNER_TEMP}/npm-${NPM_VERSION}.tgz"
+          curl --fail --silent --show-error --location \
+            --output "${tarball}" \
+            "https://registry.npmjs.org/npm/-/npm-${NPM_VERSION}.tgz"
+          integrity="sha512-$(openssl dgst -sha512 -binary "${tarball}" | openssl base64 -A)"
+          if [[ "${integrity}" != "${NPM_INTEGRITY}" ]]; then
+            echo "::error::npm@${NPM_VERSION} tarball integrity ${integrity} does not match the reviewed digest"
+            exit 1
+          fi
+          npm install --global "${tarball}"
+          installed="$(npm --version)"
+          if [[ "${installed}" != "${NPM_VERSION}" ]]; then
+            echo "::error::expected npm ${NPM_VERSION} on PATH but found ${installed}"
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -70,6 +97,18 @@ jobs:
 
       - name: Prepare and verify release tarballs
         run: npm run release:pack -- -- --require-clean --require-main-ancestor --require-release-tag --expected-release-commit "${RELEASE_COMMIT}" --output .release
+
+      # package-manifest.json carries the SHA-1 and SHA-512 of every prepared
+      # tarball, and it travels inside the artifact it describes. Pinning its
+      # digest as a job output — which a later job cannot rewrite — gives the
+      # publisher a comparison value that does not come from the artifact.
+      - name: Pin the prepared manifest digest
+        id: manifest-digest
+        shell: bash
+        run: |
+          digest="$(sha256sum .release/package-manifest.json | cut -d " " -f 1)"
+          printf 'manifest-digest=%s\n' "${digest}" >> "${GITHUB_OUTPUT}"
+          printf 'Prepared manifest SHA-256 %s\n' "${digest}" >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload the prepared release
         id: upload
@@ -115,6 +154,18 @@ jobs:
         with:
           name: logger-release-${{ github.run_id }}
           path: .release
+
+      - name: Verify the downloaded manifest against the prepare job
+        shell: bash
+        env:
+          EXPECTED_MANIFEST_DIGEST: ${{ needs.prepare.outputs.manifest-digest }}
+        run: |
+          if [[ ! "${EXPECTED_MANIFEST_DIGEST}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::the prepare job did not pin a prepared manifest digest"
+            exit 1
+          fi
+          printf '%s  %s\n' "${EXPECTED_MANIFEST_DIGEST}" .release/package-manifest.json |
+            sha256sum --check --strict --quiet
 
       - name: Publish verified prepared tarballs
         run: npm run release:publish -- -- --expected-release-commit "${RELEASE_COMMIT}" --manifest .release/package-manifest.json

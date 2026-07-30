@@ -2,7 +2,7 @@
 
 ## Status
 
-**Stage:** `0.1.1` on npm (tee, Application Insights, Cloudflare, Datadog);
+**Stage:** `0.1.2` on npm (tee, Application Insights, Cloudflare, Datadog);
 trusted publishing configured; OIDC publish workflow in-repo. Public API
 unstable. Host tee wiring on RetireGolden and pegma.dev is the remaining
 consumer bar.
