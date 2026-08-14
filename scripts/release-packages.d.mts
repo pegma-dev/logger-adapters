@@ -55,6 +55,11 @@ export function parsePnpmLockfileImporters(text: string): PnpmLockfileImporters;
 
 export function lockResolvedVersion(version: string): string;
 
+export function resolvedVersionSatisfies(
+  version: string,
+  specifier: string,
+): boolean;
+
 export function lockDependencyMatches(
   lockDependency: PnpmLockfileDependency | undefined,
   specifier: string,

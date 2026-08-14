@@ -9,7 +9,9 @@ import {
   REVIEWED_PNPM_PACKAGE_MANAGER,
   decidePublication,
   lockDependencyMatches,
+  lockResolvedVersion,
   parseArguments,
+  resolvedVersionSatisfies,
   parsePnpmLockfileImporters,
   validateReleaseTag,
   validateRepository,
@@ -167,6 +169,30 @@ describe("release package metadata", () => {
         "^1.2.0",
       ),
     ).toBe(true);
+  });
+
+  it("does not treat a prerelease as the stable pin", () => {
+    expect(lockResolvedVersion("1.2.0-rc.1")).toBe("1.2.0-rc.1");
+    expect(lockResolvedVersion("1.2.0(peer@1.0.0)")).toBe("1.2.0");
+    expect(resolvedVersionSatisfies("1.2.0-rc.1", "1.2.0")).toBe(false);
+    expect(resolvedVersionSatisfies("1.2.0(peer@1.0.0)", "1.2.0")).toBe(true);
+    expect(resolvedVersionSatisfies("1.2.0-rc.1", "1.2.0-rc.1")).toBe(true);
+    expect(resolvedVersionSatisfies("1.2.0", "1.2.0-rc.1")).toBe(false);
+    expect(
+      lockDependencyMatches(
+        { specifier: "1.2.0", version: "1.2.0-rc.1" },
+        "1.2.0",
+      ),
+    ).toBe(false);
+  });
+
+  it("follows npm caret-zero range rules", () => {
+    expect(resolvedVersionSatisfies("0.1.5", "^0.1.1")).toBe(true);
+    expect(resolvedVersionSatisfies("0.2.0", "^0.1.1")).toBe(false);
+    expect(resolvedVersionSatisfies("0.0.3", "^0.0.3")).toBe(true);
+    expect(resolvedVersionSatisfies("0.0.4", "^0.0.3")).toBe(false);
+    expect(resolvedVersionSatisfies("1.9.0", "^1.2.0")).toBe(true);
+    expect(resolvedVersionSatisfies("2.0.0", "^1.2.0")).toBe(false);
   });
 
   it("invokes a real npm CLI rather than npm_execpath", () => {

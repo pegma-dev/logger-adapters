@@ -19,11 +19,12 @@ export const REVIEWED_NPM_VERSION = "11.18.0";
 export const REVIEWED_PNPM_VERSION = "10.34.5";
 export const REVIEWED_PNPM_PACKAGE_MANAGER = `pnpm@${REVIEWED_PNPM_VERSION}+sha512.a4ee05f2f73658255bd6a89859c065a45c28a57daefae2c893a168ee2b73168c37b91e83e57ea67654ad03f03031746430e8bce38e362e042605fb8abc80192e`;
 const STABLE_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
+const EXACT_VERSION =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
 const DEPENDENCY_SECTIONS = [
   "dependencies",
   "devDependencies",
   "optionalDependencies",
-  "peerDependencies",
 ];
 
 export const RELEASE_PACKAGES = [
@@ -124,8 +125,72 @@ function unquoteYamlScalar(value) {
 }
 
 export function lockResolvedVersion(version) {
-  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)/u.exec(version);
-  return match === null ? version : `${match[1]}.${match[2]}.${match[3]}`;
+  const cut = version.indexOf("(");
+  return cut === -1 ? version : version.slice(0, cut);
+}
+
+function parseSemverTriple(version) {
+  const match = STABLE_SEMVER.exec(version);
+  if (match === null) {
+    return null;
+  }
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function compareSemver(left, right) {
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) {
+      return left[index] < right[index] ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+function caretUpperBound([major, minor, patch]) {
+  if (major > 0) {
+    return [major + 1, 0, 0];
+  }
+  if (minor > 0) {
+    return [0, minor + 1, 0];
+  }
+  return [0, 0, patch + 1];
+}
+
+function tildeUpperBound([major, minor]) {
+  return [major, minor + 1, 0];
+}
+
+function inHalfOpenRange(resolved, lower, upper) {
+  return (
+    compareSemver(resolved, lower) >= 0 && compareSemver(resolved, upper) < 0
+  );
+}
+
+export function resolvedVersionSatisfies(version, specifier) {
+  if (EXACT_VERSION.test(specifier)) {
+    return version === specifier || version.startsWith(`${specifier}(`);
+  }
+  const concrete = lockResolvedVersion(version);
+  if (specifier === "*" || specifier === "x" || specifier === "X") {
+    return parseSemverTriple(concrete) !== null;
+  }
+  const resolved = parseSemverTriple(concrete);
+  if (resolved === null) {
+    return false;
+  }
+  if (specifier.startsWith("^")) {
+    const lower = parseSemverTriple(specifier.slice(1));
+    return (
+      lower !== null && inHalfOpenRange(resolved, lower, caretUpperBound(lower))
+    );
+  }
+  if (specifier.startsWith("~")) {
+    const lower = parseSemverTriple(specifier.slice(1));
+    return (
+      lower !== null && inHalfOpenRange(resolved, lower, tildeUpperBound(lower))
+    );
+  }
+  return false;
 }
 
 export function lockDependencyMatches(lockDependency, specifier, options = {}) {
@@ -140,11 +205,7 @@ export function lockDependencyMatches(lockDependency, specifier, options = {}) {
   if (options.workspace === true) {
     return lockDependency.version.startsWith("link:");
   }
-  const resolved = lockResolvedVersion(lockDependency.version);
-  if (STABLE_SEMVER.test(specifier)) {
-    return resolved === specifier;
-  }
-  return STABLE_SEMVER.test(resolved);
+  return resolvedVersionSatisfies(lockDependency.version, specifier);
 }
 
 export function parsePnpmLockfileImporters(text) {
