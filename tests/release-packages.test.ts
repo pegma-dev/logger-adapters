@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   RELEASE_PACKAGES,
+  REVIEWED_NPM_VERSION,
   decidePublication,
   parseArguments,
   validateReleaseTag,
@@ -172,8 +173,11 @@ describe("release source authentication", () => {
     expect(header).not.toContain("id-token: write");
     expect(prepare).not.toContain("id-token: write");
     expect(publish).toContain("id-token: write");
+    expect(prepare).toContain("pnpm install --frozen-lockfile");
+    expect(prepare).not.toContain("npm ci");
     expect(publish).not.toContain("npm ci");
     expect(publish).not.toContain("npm install");
+    expect(publish).not.toContain("pnpm install");
     expect(publish).toContain("npm run release:publish");
     expect(workflow).not.toContain("workflow_dispatch");
     expect(workflow).toContain("retention-days: 30");
@@ -199,16 +203,14 @@ describe("release source authentication", () => {
 
   it("installs the reviewed npm release from a digest-pinned tarball", () => {
     const { prepare } = publishWorkflowJobs();
-    const { packageManager } = JSON.parse(
-      readFileSync(join(process.cwd(), "package.json"), "utf8"),
-    ) as { packageManager: string };
-    const version = packageManager.replace(/^npm@/u, "");
-    expect(prepare).toContain(`NPM_VERSION: ${version}`);
+    expect(prepare).toContain(`NPM_VERSION: ${REVIEWED_NPM_VERSION}`);
     expect(prepare).toContain(
       "NPM_INTEGRITY: sha512-T67M4L5wNm0cZ7EBLErcEkY1SmzEW/WJ+SADBzsFUY1UdAPfFHXFQtZ6SEXiK0+vzXysCvAsepbMaBTwnrAD+w==",
     );
     expect(prepare).toContain('npm install --global "${tarball}"');
-    expect(prepare).not.toContain(`npm install --global npm@${version}`);
+    expect(prepare).not.toContain(
+      `npm install --global npm@${REVIEWED_NPM_VERSION}`,
+    );
   });
 });
 

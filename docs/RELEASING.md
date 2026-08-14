@@ -58,10 +58,11 @@ the GitHub release with `--verify-tag`. Never let GitHub create, move, or
 replace the tag.
 
 The unprivileged preparation job verifies the tag signature, version,
-release-event commit, and `origin/main` ancestry; installs the reviewed npm
-version with caching disabled; runs the full gate; packs every public
-workspace exactly once; smoke-tests the tarballs; and records each tarball's
-SHA-1 and SHA-512 integrity.
+release-event commit, and `origin/main` ancestry; enables Corepack for the
+`packageManager` pin; installs the reviewed npm version with caching disabled
+so `npm pack` and trusted publishing stay on known bytes; runs the full gate
+with pnpm; packs every public workspace exactly once; smoke-tests the
+tarballs; and records each tarball's SHA-1 and SHA-512 integrity.
 
 Only the `npm-publish` job receives `id-token: write`. It installs no
 dependencies, verifies the downloaded prepared artifact, and publishes

@@ -55,11 +55,15 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
-      # The reviewed npm release is the only dependency of this job that npm ci
-      # cannot integrity-check, so pin its tarball digest here and install the
-      # exact bytes that were verified rather than a version the registry
-      # resolves at run time. NPM_VERSION must stay equal to the root
-      # packageManager pin, and NPM_INTEGRITY must be updated with it
+      - name: Enable Corepack
+        run: corepack enable
+
+      # Workspace installs use pnpm (packageManager). The reviewed npm
+      # release is still required for `npm pack` and trusted-publisher
+      # `npm publish`; it is the only tool this job installs that
+      # pnpm-lock.yaml cannot integrity-check, so pin its tarball digest
+      # here. NPM_VERSION is independent of packageManager and
+      # NPM_INTEGRITY must be updated with it
       # (npm view npm@<version> dist.integrity).
       - name: Use the reviewed npm release
         shell: bash
@@ -84,19 +88,19 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Check formatting
-        run: npm run format:check
+        run: pnpm run format:check
 
       - name: Check types
-        run: npm run check
+        run: pnpm run check
 
       - name: Run tests
-        run: npm test
+        run: pnpm test
 
       - name: Prepare and verify release tarballs
-        run: npm run release:pack -- -- --require-clean --require-main-ancestor --require-release-tag --expected-release-commit "${RELEASE_COMMIT}" --output .release
+        run: pnpm run release:pack -- -- --require-clean --require-main-ancestor --require-release-tag --expected-release-commit "${RELEASE_COMMIT}" --output .release
 
       # package-manifest.json carries the SHA-1 and SHA-512 of every prepared
       # tarball, and it travels inside the artifact it describes. Pinning its
