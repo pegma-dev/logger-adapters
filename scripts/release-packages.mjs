@@ -17,6 +17,7 @@ const REPOSITORY_URL = "git+https://github.com/pegma-dev/logger-adapters.git";
 const NODE_RANGE = ">=22";
 export const REVIEWED_NPM_VERSION = "11.18.0";
 export const REVIEWED_PNPM_VERSION = "10.34.5";
+export const REVIEWED_PNPM_PACKAGE_MANAGER = `pnpm@${REVIEWED_PNPM_VERSION}+sha512.a4ee05f2f73658255bd6a89859c065a45c28a57daefae2c893a168ee2b73168c37b91e83e57ea67654ad03f03031746430e8bce38e362e042605fb8abc80192e`;
 const STABLE_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 const DEPENDENCY_SECTIONS = [
   "dependencies",
@@ -107,7 +108,7 @@ function unquoteYamlScalar(value) {
   return value;
 }
 
-function parsePnpmLockfileImporters(text) {
+export function parsePnpmLockfileImporters(text) {
   const importersMarker = "\nimporters:\n";
   const start = text.startsWith("importers:\n")
     ? "importers:\n".length
@@ -148,7 +149,10 @@ function parsePnpmLockfileImporters(text) {
     const depMatch = /^ {6}(.+):$/.exec(line);
     if (depMatch && current !== null && section !== null) {
       depName = unquoteYamlScalar(depMatch[1]);
-      importers[current][section][depName] = "";
+      importers[current][section][depName] = {
+        specifier: "",
+        version: "",
+      };
       continue;
     }
     const specifierMatch = /^ {8}specifier: (.+)$/.exec(line);
@@ -158,8 +162,20 @@ function parsePnpmLockfileImporters(text) {
       section !== null &&
       depName !== null
     ) {
-      importers[current][section][depName] = unquoteYamlScalar(
+      importers[current][section][depName].specifier = unquoteYamlScalar(
         specifierMatch[1],
+      );
+      continue;
+    }
+    const versionMatch = /^ {8}version: (.+)$/.exec(line);
+    if (
+      versionMatch &&
+      current !== null &&
+      section !== null &&
+      depName !== null
+    ) {
+      importers[current][section][depName].version = unquoteYamlScalar(
+        versionMatch[1],
       );
     }
   }
@@ -258,19 +274,36 @@ async function validatePackage(root, definition, lockfile) {
   }
   for (const section of DEPENDENCY_SECTIONS) {
     for (const [name, version] of Object.entries(manifest[section] ?? {})) {
-      if (!RELEASE_NAMES.has(name)) {
-        continue;
+      const locked = lockEntry[section]?.[name];
+      if (locked?.specifier !== version) {
+        fail(
+          `${definition.name} lockfile specifier for ${name} does not match package.json`,
+        );
       }
-      const dependency = RELEASE_PACKAGES.find((entry) => entry.name === name);
-      const dependencyManifest = await readJson(
-        join(root, "packages", dependency.directory, "package.json"),
-      );
-      if (
-        version !== dependencyManifest.version ||
-        lockEntry[section]?.[name] !== version
+      if (typeof locked.version !== "string" || locked.version.length === 0) {
+        fail(
+          `${definition.name} lockfile is missing a resolved version for ${name}`,
+        );
+      }
+      if (RELEASE_NAMES.has(name)) {
+        const dependency = RELEASE_PACKAGES.find(
+          (entry) => entry.name === name,
+        );
+        const dependencyManifest = await readJson(
+          join(root, "packages", dependency.directory, "package.json"),
+        );
+        if (version !== dependencyManifest.version) {
+          fail(
+            `${definition.name} must pin ${name} to its exact workspace version`,
+          );
+        }
+      } else if (
+        STABLE_SEMVER.test(version) &&
+        locked.version !== version &&
+        !locked.version.startsWith(`${version}(`)
       ) {
         fail(
-          `${definition.name} must pin ${name} to its exact workspace version`,
+          `${definition.name} lockfile resolved ${name} to ${locked.version}, expected ${version}`,
         );
       }
     }
@@ -366,9 +399,9 @@ export async function validateRepository(options = {}) {
   const rootManifest = await readJson(join(root, "package.json"));
   if (
     rootManifest.private !== true ||
-    rootManifest.packageManager !== `pnpm@${REVIEWED_PNPM_VERSION}`
+    rootManifest.packageManager !== REVIEWED_PNPM_PACKAGE_MANAGER
   ) {
-    fail(`the private root must pin pnpm@${REVIEWED_PNPM_VERSION}`);
+    fail(`the private root must pin ${REVIEWED_PNPM_PACKAGE_MANAGER}`);
   }
   const expectedInventory = RELEASE_PACKAGES.map(({ name }) => name).sort();
   const actualInventory = await publicWorkspaceInventory(root);

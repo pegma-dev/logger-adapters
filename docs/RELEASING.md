@@ -51,11 +51,25 @@ any future internal dependencies to be exact workspace-version pins.
 
 ## Release procedure
 
-Change package versions through an ordinary reviewed pull request and run the
-complete gate on Node 22 and 24. After merge, create a signed annotated tag at
-the exact `origin/main` commit, push and verify that tag, and only then create
-the GitHub release with `--verify-tag`. Never let GitHub create, move, or
-replace the tag.
+Change package versions through an ordinary reviewed pull request that updates
+`pnpm-lock.yaml` with the rest of the manifests, then run the complete gate
+on Node 22 and 24:
+
+```sh
+corepack enable
+pnpm install
+pnpm run format:check
+pnpm run check
+pnpm test
+```
+
+After merge, create a signed annotated tag at the exact `origin/main` commit,
+push and verify that tag, and only then create the GitHub release with
+`--verify-tag`. Never let GitHub create, move, or replace the tag.
+
+Tags published before the pnpm conversion used `package-lock.json` and
+`npm ci`. Those tags are immutable; do not rewrite their documented npm
+commands onto pnpm.
 
 The unprivileged preparation job verifies the tag signature, version,
 release-event commit, and `origin/main` ancestry; enables Corepack for the

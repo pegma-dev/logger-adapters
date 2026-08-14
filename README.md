@@ -41,6 +41,19 @@ forwards each call to every sink. Both reference hosts tee Datadog beside
 their primary sink (App Insights on RetireGolden, Cloudflare Logs on
 pegma.dev) — Spine never learns about either vendor.
 
+## Development
+
+Requires Node.js 22 or newer. Enable Corepack before the first `pnpm`
+command so the `packageManager` pin is the CLI that runs:
+
+```sh
+corepack enable
+pnpm install
+pnpm run format:check
+pnpm run check
+pnpm test
+```
+
 ## License
 
 MIT © RetireGolden, LLC

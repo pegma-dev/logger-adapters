@@ -6,8 +6,10 @@ import { describe, expect, it } from "vitest";
 import {
   RELEASE_PACKAGES,
   REVIEWED_NPM_VERSION,
+  REVIEWED_PNPM_PACKAGE_MANAGER,
   decidePublication,
   parseArguments,
+  parsePnpmLockfileImporters,
   validateReleaseTag,
   validateRepository,
 } from "../scripts/release-packages.mjs";
@@ -75,6 +77,48 @@ describe("release package metadata", () => {
 
   it("validates package manifests and the lockfile together", async () => {
     await expect(validateRepository()).resolves.toBeDefined();
+  });
+
+  it("pins the reviewed pnpm release with a Corepack integrity hash", () => {
+    const { packageManager } = JSON.parse(
+      readFileSync(join(process.cwd(), "package.json"), "utf8"),
+    ) as { packageManager: string };
+    expect(packageManager).toBe(REVIEWED_PNPM_PACKAGE_MANAGER);
+    expect(packageManager).toMatch(/^pnpm@10\.34\.5\+sha512\.[0-9a-f]{128}$/u);
+  });
+
+  it("keeps both the lockfile specifier and the resolved version", () => {
+    const lockfile = parsePnpmLockfileImporters(
+      [
+        "lockfileVersion: '9.0'",
+        "",
+        "importers:",
+        "",
+        "  packages/logger-tee:",
+        "    dependencies:",
+        "      '@pegma/spine':",
+        "        specifier: 0.1.1",
+        "        version: 999.0.0",
+        "",
+        "packages:",
+        "",
+      ].join("\n"),
+    );
+    expect(
+      lockfile["packages/logger-tee"]?.dependencies?.["@pegma/spine"],
+    ).toEqual({
+      specifier: "0.1.1",
+      version: "999.0.0",
+    });
+  });
+
+  it("invokes a real npm CLI rather than npm_execpath", () => {
+    const source = readFileSync(
+      join(process.cwd(), "scripts", "release-packages.mjs"),
+      "utf8",
+    );
+    expect(source).toMatch(/function runNpm\(/u);
+    expect(source).not.toMatch(/process\.env\.npm_execpath/u);
   });
 
   it("requires the release tag to match a public package version", async () => {
@@ -178,6 +222,7 @@ describe("release source authentication", () => {
     expect(publish).not.toContain("npm ci");
     expect(publish).not.toContain("npm install");
     expect(publish).not.toContain("pnpm install");
+    expect(publish).not.toContain("corepack");
     expect(publish).toContain("npm run release:publish");
     expect(workflow).not.toContain("workflow_dispatch");
     expect(workflow).toContain("retention-days: 30");
