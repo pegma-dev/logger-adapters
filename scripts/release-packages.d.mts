@@ -36,6 +36,8 @@ export interface ValidationResult {
   readonly releaseTag: string | undefined;
 }
 
+export const REVIEWED_NPM_VERSION: string;
+export const REVIEWED_PNPM_VERSION: string;
 export const RELEASE_PACKAGES: readonly ReleasePackageDefinition[];
 
 export function parseArguments(

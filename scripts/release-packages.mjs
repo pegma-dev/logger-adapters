@@ -119,7 +119,8 @@ function parsePnpmLockfileImporters(text) {
     ? "importers:\n".length
     : start + importersMarker.length;
   const packagesIndex = text.indexOf("\npackages:\n", from);
-  const block = packagesIndex === -1 ? text.slice(from) : text.slice(from, packagesIndex);
+  const block =
+    packagesIndex === -1 ? text.slice(from) : text.slice(from, packagesIndex);
   const importers = {};
   let current = null;
   let section = null;
