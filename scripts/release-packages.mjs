@@ -99,13 +99,52 @@ function runNpm(arguments_, options = {}) {
 }
 
 function unquoteYamlScalar(value) {
-  if (
-    (value.startsWith("'") && value.endsWith("'")) ||
-    (value.startsWith('"') && value.endsWith('"'))
-  ) {
-    return value.slice(1, -1);
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).replaceAll("''", "'");
+  }
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1).replaceAll(/\\(["\\/bfnrt])/gu, (_match, ch) => {
+      switch (ch) {
+        case "b":
+          return "\b";
+        case "f":
+          return "\f";
+        case "n":
+          return "\n";
+        case "r":
+          return "\r";
+        case "t":
+          return "\t";
+        default:
+          return ch;
+      }
+    });
   }
   return value;
+}
+
+export function lockResolvedVersion(version) {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)/u.exec(version);
+  return match === null ? version : `${match[1]}.${match[2]}.${match[3]}`;
+}
+
+export function lockDependencyMatches(lockDependency, specifier, options = {}) {
+  if (
+    lockDependency === undefined ||
+    lockDependency.specifier !== specifier ||
+    typeof lockDependency.version !== "string" ||
+    lockDependency.version.length === 0
+  ) {
+    return false;
+  }
+  if (options.workspace === true) {
+    return lockDependency.version.startsWith("link:");
+  }
+  const resolved = lockResolvedVersion(lockDependency.version);
+  if (STABLE_SEMVER.test(specifier)) {
+    return resolved === specifier;
+  }
+  return STABLE_SEMVER.test(resolved);
 }
 
 export function parsePnpmLockfileImporters(text) {
@@ -275,14 +314,13 @@ async function validatePackage(root, definition, lockfile) {
   for (const section of DEPENDENCY_SECTIONS) {
     for (const [name, version] of Object.entries(manifest[section] ?? {})) {
       const locked = lockEntry[section]?.[name];
-      if (locked?.specifier !== version) {
+      if (
+        !lockDependencyMatches(locked, version, {
+          workspace: RELEASE_NAMES.has(name),
+        })
+      ) {
         fail(
-          `${definition.name} lockfile specifier for ${name} does not match package.json`,
-        );
-      }
-      if (typeof locked.version !== "string" || locked.version.length === 0) {
-        fail(
-          `${definition.name} lockfile is missing a resolved version for ${name}`,
+          `${definition.name} lockfile must match ${name} to its own specifier and resolved version`,
         );
       }
       if (RELEASE_NAMES.has(name)) {
@@ -297,14 +335,6 @@ async function validatePackage(root, definition, lockfile) {
             `${definition.name} must pin ${name} to its exact workspace version`,
           );
         }
-      } else if (
-        STABLE_SEMVER.test(version) &&
-        locked.version !== version &&
-        !locked.version.startsWith(`${version}(`)
-      ) {
-        fail(
-          `${definition.name} lockfile resolved ${name} to ${locked.version}, expected ${version}`,
-        );
       }
     }
   }

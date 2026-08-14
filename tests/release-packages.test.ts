@@ -8,6 +8,7 @@ import {
   REVIEWED_NPM_VERSION,
   REVIEWED_PNPM_PACKAGE_MANAGER,
   decidePublication,
+  lockDependencyMatches,
   parseArguments,
   parsePnpmLockfileImporters,
   validateReleaseTag,
@@ -99,6 +100,10 @@ describe("release package metadata", () => {
         "      '@pegma/spine':",
         "        specifier: 0.1.1",
         "        version: 999.0.0",
+        "    peerDependencies:",
+        "      typescript:",
+        "        specifier: '*'",
+        "        version: 7.0.2",
         "",
         "packages:",
         "",
@@ -110,6 +115,58 @@ describe("release package metadata", () => {
       specifier: "0.1.1",
       version: "999.0.0",
     });
+    expect(
+      lockfile["packages/logger-tee"]?.peerDependencies?.typescript,
+    ).toEqual({
+      specifier: "*",
+      version: "7.0.2",
+    });
+  });
+
+  it("unquotes YAML scalars before comparing specifier and version", () => {
+    const lockfile = parsePnpmLockfileImporters(
+      [
+        "lockfileVersion: '9.0'",
+        "",
+        "importers:",
+        "",
+        "  packages/logger-tee:",
+        "    dependencies:",
+        "      '@pegma/spine':",
+        "        specifier: '^1.2.0'",
+        '        version: "1.2.3"',
+        "",
+        "packages:",
+        "",
+      ].join("\n"),
+    );
+    expect(
+      lockfile["packages/logger-tee"]?.dependencies?.["@pegma/spine"],
+    ).toEqual({
+      specifier: "^1.2.0",
+      version: "1.2.3",
+    });
+  });
+
+  it("accepts resolved versions that satisfy a semver range", () => {
+    expect(
+      lockDependencyMatches(
+        { specifier: "^1.2.0", version: "1.2.3" },
+        "^1.2.0",
+      ),
+    ).toBe(true);
+    expect(
+      lockDependencyMatches({ specifier: "1.2.0", version: "1.2.0" }, "1.2.0"),
+    ).toBe(true);
+    expect(
+      lockDependencyMatches({ specifier: "1.2.0", version: "1.2.3" }, "1.2.0"),
+    ).toBe(false);
+    expect(
+      lockDependencyMatches(
+        { specifier: "^1.2.0", version: "1.2.3(peer@1.0.0)" },
+        "^1.2.0",
+      ),
+    ).toBe(true);
   });
 
   it("invokes a real npm CLI rather than npm_execpath", () => {

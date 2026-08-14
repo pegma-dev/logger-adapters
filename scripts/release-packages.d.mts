@@ -53,6 +53,14 @@ export const RELEASE_PACKAGES: readonly ReleasePackageDefinition[];
 
 export function parsePnpmLockfileImporters(text: string): PnpmLockfileImporters;
 
+export function lockResolvedVersion(version: string): string;
+
+export function lockDependencyMatches(
+  lockDependency: PnpmLockfileDependency | undefined,
+  specifier: string,
+  options?: { readonly workspace?: boolean },
+): boolean;
+
 export function parseArguments(
   arguments_: readonly string[],
 ): ReleaseCommandOptions;

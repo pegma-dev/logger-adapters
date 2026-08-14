@@ -43,10 +43,11 @@ pegma.dev) — Spine never learns about either vendor.
 
 ## Development
 
-Requires Node.js 22 or newer. Enable Corepack before the first `pnpm`
-command so the `packageManager` pin is the CLI that runs:
+Requires Node.js 22 or newer. Stock Node 22/24 ships Corepack but not a
+`pnpm` shim. Node 25+ does not bundle Corepack; install it first.
 
 ```sh
+npm install -g corepack
 corepack enable
 pnpm install
 pnpm run format:check

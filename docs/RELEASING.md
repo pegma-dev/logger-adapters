@@ -56,6 +56,7 @@ Change package versions through an ordinary reviewed pull request that updates
 on Node 22 and 24:
 
 ```sh
+npm install -g corepack
 corepack enable
 pnpm install
 pnpm run format:check
