@@ -15,13 +15,16 @@ import { fileURLToPath } from "node:url";
 
 const REPOSITORY_URL = "git+https://github.com/pegma-dev/logger-adapters.git";
 const NODE_RANGE = ">=22";
-const REVIEWED_NPM_VERSION = "11.18.0";
+export const REVIEWED_NPM_VERSION = "11.18.0";
+export const REVIEWED_PNPM_VERSION = "10.34.5";
+export const REVIEWED_PNPM_PACKAGE_MANAGER = `pnpm@${REVIEWED_PNPM_VERSION}+sha512.a4ee05f2f73658255bd6a89859c065a45c28a57daefae2c893a168ee2b73168c37b91e83e57ea67654ad03f03031746430e8bce38e362e042605fb8abc80192e`;
 const STABLE_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
+const EXACT_VERSION =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
 const DEPENDENCY_SECTIONS = [
   "dependencies",
   "devDependencies",
   "optionalDependencies",
-  "peerDependencies",
 ];
 
 export const RELEASE_PACKAGES = [
@@ -87,14 +90,196 @@ function run(command, arguments_, options = {}) {
 }
 
 function runNpm(arguments_, options = {}) {
-  const npmExecPath = process.env.npm_execpath;
-  if (npmExecPath !== undefined) {
-    return run(process.execPath, [npmExecPath, ...arguments_], options);
-  }
+  // Always invoke the npm CLI. When this script is launched via `pnpm run`,
+  // `npm_execpath` points at pnpm, which cannot pack or publish with the
+  // reviewed npm provenance flags.
   return run(process.platform === "win32" ? "npm.cmd" : "npm", arguments_, {
     ...options,
     shell: process.platform === "win32",
   });
+}
+
+function unquoteYamlScalar(value) {
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).replaceAll("''", "'");
+  }
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1).replaceAll(/\\(["\\/bfnrt])/gu, (_match, ch) => {
+      switch (ch) {
+        case "b":
+          return "\b";
+        case "f":
+          return "\f";
+        case "n":
+          return "\n";
+        case "r":
+          return "\r";
+        case "t":
+          return "\t";
+        default:
+          return ch;
+      }
+    });
+  }
+  return value;
+}
+
+export function lockResolvedVersion(version) {
+  const cut = version.indexOf("(");
+  return cut === -1 ? version : version.slice(0, cut);
+}
+
+function parseSemverTriple(version) {
+  const match = STABLE_SEMVER.exec(version);
+  if (match === null) {
+    return null;
+  }
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function compareSemver(left, right) {
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) {
+      return left[index] < right[index] ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+function caretUpperBound([major, minor, patch]) {
+  if (major > 0) {
+    return [major + 1, 0, 0];
+  }
+  if (minor > 0) {
+    return [0, minor + 1, 0];
+  }
+  return [0, 0, patch + 1];
+}
+
+function tildeUpperBound([major, minor]) {
+  return [major, minor + 1, 0];
+}
+
+function inHalfOpenRange(resolved, lower, upper) {
+  return (
+    compareSemver(resolved, lower) >= 0 && compareSemver(resolved, upper) < 0
+  );
+}
+
+export function resolvedVersionSatisfies(version, specifier) {
+  if (EXACT_VERSION.test(specifier)) {
+    return version === specifier || version.startsWith(`${specifier}(`);
+  }
+  const concrete = lockResolvedVersion(version);
+  if (specifier === "*" || specifier === "x" || specifier === "X") {
+    return parseSemverTriple(concrete) !== null;
+  }
+  const resolved = parseSemverTriple(concrete);
+  if (resolved === null) {
+    return false;
+  }
+  if (specifier.startsWith("^")) {
+    const lower = parseSemverTriple(specifier.slice(1));
+    return (
+      lower !== null && inHalfOpenRange(resolved, lower, caretUpperBound(lower))
+    );
+  }
+  if (specifier.startsWith("~")) {
+    const lower = parseSemverTriple(specifier.slice(1));
+    return (
+      lower !== null && inHalfOpenRange(resolved, lower, tildeUpperBound(lower))
+    );
+  }
+  return false;
+}
+
+export function lockDependencyMatches(lockDependency, specifier, options = {}) {
+  if (
+    lockDependency === undefined ||
+    lockDependency.specifier !== specifier ||
+    typeof lockDependency.version !== "string" ||
+    lockDependency.version.length === 0
+  ) {
+    return false;
+  }
+  if (options.workspace === true) {
+    return lockDependency.version.startsWith("link:");
+  }
+  return resolvedVersionSatisfies(lockDependency.version, specifier);
+}
+
+export function parsePnpmLockfileImporters(text) {
+  const importersMarker = "\nimporters:\n";
+  const start = text.startsWith("importers:\n")
+    ? "importers:\n".length
+    : text.indexOf(importersMarker);
+  if (start === -1) {
+    fail("pnpm-lock.yaml is missing importers");
+  }
+  const from = text.startsWith("importers:\n")
+    ? "importers:\n".length
+    : start + importersMarker.length;
+  const packagesIndex = text.indexOf("\npackages:\n", from);
+  const block =
+    packagesIndex === -1 ? text.slice(from) : text.slice(from, packagesIndex);
+  const importers = {};
+  let current = null;
+  let section = null;
+  let depName = null;
+
+  for (const line of block.split("\n")) {
+    const importerMatch = /^ {2}(\.|packages\/[^:]+):$/.exec(line);
+    if (importerMatch) {
+      current = importerMatch[1];
+      importers[current] = {};
+      section = null;
+      depName = null;
+      continue;
+    }
+    const sectionMatch =
+      /^ {4}(dependencies|devDependencies|optionalDependencies|peerDependencies):$/.exec(
+        line,
+      );
+    if (sectionMatch && current !== null) {
+      section = sectionMatch[1];
+      importers[current][section] = {};
+      depName = null;
+      continue;
+    }
+    const depMatch = /^ {6}(.+):$/.exec(line);
+    if (depMatch && current !== null && section !== null) {
+      depName = unquoteYamlScalar(depMatch[1]);
+      importers[current][section][depName] = {
+        specifier: "",
+        version: "",
+      };
+      continue;
+    }
+    const specifierMatch = /^ {8}specifier: (.+)$/.exec(line);
+    if (
+      specifierMatch &&
+      current !== null &&
+      section !== null &&
+      depName !== null
+    ) {
+      importers[current][section][depName].specifier = unquoteYamlScalar(
+        specifierMatch[1],
+      );
+      continue;
+    }
+    const versionMatch = /^ {8}version: (.+)$/.exec(line);
+    if (
+      versionMatch &&
+      current !== null &&
+      section !== null &&
+      depName !== null
+    ) {
+      importers[current][section][depName].version = unquoteYamlScalar(
+        versionMatch[1],
+      );
+    }
+  }
+  return importers;
 }
 
 function gitCommand() {
@@ -161,7 +346,10 @@ async function validatePackage(root, definition, lockfile) {
   }
   if (
     typeof manifest.scripts?.prepack !== "string" ||
-    !manifest.scripts.prepack.includes("build")
+    !(
+      manifest.scripts.prepack.includes("build") ||
+      manifest.scripts.prepack.includes("tsc")
+    )
   ) {
     fail(`${definition.name} must build during prepack`);
   }
@@ -180,28 +368,34 @@ async function validatePackage(root, definition, lockfile) {
   await stat(join(packageDirectory, "README.md"));
   await stat(join(packageDirectory, "LICENSE"));
 
-  const lockEntry = lockfile.packages?.[`packages/${definition.directory}`];
-  if (lockEntry?.version !== manifest.version) {
-    fail(
-      `${definition.name} version is not synchronized with package-lock.json`,
-    );
+  const lockEntry = lockfile[`packages/${definition.directory}`];
+  if (lockEntry === undefined) {
+    fail(`${definition.name} is not present in pnpm-lock.yaml`);
   }
   for (const section of DEPENDENCY_SECTIONS) {
     for (const [name, version] of Object.entries(manifest[section] ?? {})) {
-      if (!RELEASE_NAMES.has(name)) {
-        continue;
-      }
-      const dependency = RELEASE_PACKAGES.find((entry) => entry.name === name);
-      const dependencyManifest = await readJson(
-        join(root, "packages", dependency.directory, "package.json"),
-      );
+      const locked = lockEntry[section]?.[name];
       if (
-        version !== dependencyManifest.version ||
-        lockEntry[section]?.[name] !== version
+        !lockDependencyMatches(locked, version, {
+          workspace: RELEASE_NAMES.has(name),
+        })
       ) {
         fail(
-          `${definition.name} must pin ${name} to its exact workspace version`,
+          `${definition.name} lockfile must match ${name} to its own specifier and resolved version`,
         );
+      }
+      if (RELEASE_NAMES.has(name)) {
+        const dependency = RELEASE_PACKAGES.find(
+          (entry) => entry.name === name,
+        );
+        const dependencyManifest = await readJson(
+          join(root, "packages", dependency.directory, "package.json"),
+        );
+        if (version !== dependencyManifest.version) {
+          fail(
+            `${definition.name} must pin ${name} to its exact workspace version`,
+          );
+        }
       }
     }
   }
@@ -296,16 +490,18 @@ export async function validateRepository(options = {}) {
   const rootManifest = await readJson(join(root, "package.json"));
   if (
     rootManifest.private !== true ||
-    rootManifest.packageManager !== `npm@${REVIEWED_NPM_VERSION}`
+    rootManifest.packageManager !== REVIEWED_PNPM_PACKAGE_MANAGER
   ) {
-    fail(`the private root must pin npm@${REVIEWED_NPM_VERSION}`);
+    fail(`the private root must pin ${REVIEWED_PNPM_PACKAGE_MANAGER}`);
   }
   const expectedInventory = RELEASE_PACKAGES.map(({ name }) => name).sort();
   const actualInventory = await publicWorkspaceInventory(root);
   if (!sameJson(actualInventory, expectedInventory)) {
     fail("public workspace inventory does not match the reviewed release list");
   }
-  const lockfile = await readJson(join(root, "package-lock.json"));
+  const lockfile = parsePnpmLockfileImporters(
+    await readFile(join(root, "pnpm-lock.yaml"), "utf8"),
+  );
   const packages = [];
   for (const definition of RELEASE_PACKAGES) {
     packages.push(await validatePackage(root, definition, lockfile));

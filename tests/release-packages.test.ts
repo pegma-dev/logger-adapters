@@ -5,8 +5,14 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   RELEASE_PACKAGES,
+  REVIEWED_NPM_VERSION,
+  REVIEWED_PNPM_PACKAGE_MANAGER,
   decidePublication,
+  lockDependencyMatches,
+  lockResolvedVersion,
   parseArguments,
+  resolvedVersionSatisfies,
+  parsePnpmLockfileImporters,
   validateReleaseTag,
   validateRepository,
 } from "../scripts/release-packages.mjs";
@@ -74,6 +80,128 @@ describe("release package metadata", () => {
 
   it("validates package manifests and the lockfile together", async () => {
     await expect(validateRepository()).resolves.toBeDefined();
+  });
+
+  it("pins the reviewed pnpm release with a Corepack integrity hash", () => {
+    const { packageManager } = JSON.parse(
+      readFileSync(join(process.cwd(), "package.json"), "utf8"),
+    ) as { packageManager: string };
+    expect(packageManager).toBe(REVIEWED_PNPM_PACKAGE_MANAGER);
+    expect(packageManager).toMatch(/^pnpm@10\.34\.5\+sha512\.[0-9a-f]{128}$/u);
+  });
+
+  it("keeps both the lockfile specifier and the resolved version", () => {
+    const lockfile = parsePnpmLockfileImporters(
+      [
+        "lockfileVersion: '9.0'",
+        "",
+        "importers:",
+        "",
+        "  packages/logger-tee:",
+        "    dependencies:",
+        "      '@pegma/spine':",
+        "        specifier: 0.1.1",
+        "        version: 999.0.0",
+        "    peerDependencies:",
+        "      typescript:",
+        "        specifier: '*'",
+        "        version: 7.0.2",
+        "",
+        "packages:",
+        "",
+      ].join("\n"),
+    );
+    expect(
+      lockfile["packages/logger-tee"]?.dependencies?.["@pegma/spine"],
+    ).toEqual({
+      specifier: "0.1.1",
+      version: "999.0.0",
+    });
+    expect(
+      lockfile["packages/logger-tee"]?.peerDependencies?.typescript,
+    ).toEqual({
+      specifier: "*",
+      version: "7.0.2",
+    });
+  });
+
+  it("unquotes YAML scalars before comparing specifier and version", () => {
+    const lockfile = parsePnpmLockfileImporters(
+      [
+        "lockfileVersion: '9.0'",
+        "",
+        "importers:",
+        "",
+        "  packages/logger-tee:",
+        "    dependencies:",
+        "      '@pegma/spine':",
+        "        specifier: '^1.2.0'",
+        '        version: "1.2.3"',
+        "",
+        "packages:",
+        "",
+      ].join("\n"),
+    );
+    expect(
+      lockfile["packages/logger-tee"]?.dependencies?.["@pegma/spine"],
+    ).toEqual({
+      specifier: "^1.2.0",
+      version: "1.2.3",
+    });
+  });
+
+  it("accepts resolved versions that satisfy a semver range", () => {
+    expect(
+      lockDependencyMatches(
+        { specifier: "^1.2.0", version: "1.2.3" },
+        "^1.2.0",
+      ),
+    ).toBe(true);
+    expect(
+      lockDependencyMatches({ specifier: "1.2.0", version: "1.2.0" }, "1.2.0"),
+    ).toBe(true);
+    expect(
+      lockDependencyMatches({ specifier: "1.2.0", version: "1.2.3" }, "1.2.0"),
+    ).toBe(false);
+    expect(
+      lockDependencyMatches(
+        { specifier: "^1.2.0", version: "1.2.3(peer@1.0.0)" },
+        "^1.2.0",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not treat a prerelease as the stable pin", () => {
+    expect(lockResolvedVersion("1.2.0-rc.1")).toBe("1.2.0-rc.1");
+    expect(lockResolvedVersion("1.2.0(peer@1.0.0)")).toBe("1.2.0");
+    expect(resolvedVersionSatisfies("1.2.0-rc.1", "1.2.0")).toBe(false);
+    expect(resolvedVersionSatisfies("1.2.0(peer@1.0.0)", "1.2.0")).toBe(true);
+    expect(resolvedVersionSatisfies("1.2.0-rc.1", "1.2.0-rc.1")).toBe(true);
+    expect(resolvedVersionSatisfies("1.2.0", "1.2.0-rc.1")).toBe(false);
+    expect(
+      lockDependencyMatches(
+        { specifier: "1.2.0", version: "1.2.0-rc.1" },
+        "1.2.0",
+      ),
+    ).toBe(false);
+  });
+
+  it("follows npm caret-zero range rules", () => {
+    expect(resolvedVersionSatisfies("0.1.5", "^0.1.1")).toBe(true);
+    expect(resolvedVersionSatisfies("0.2.0", "^0.1.1")).toBe(false);
+    expect(resolvedVersionSatisfies("0.0.3", "^0.0.3")).toBe(true);
+    expect(resolvedVersionSatisfies("0.0.4", "^0.0.3")).toBe(false);
+    expect(resolvedVersionSatisfies("1.9.0", "^1.2.0")).toBe(true);
+    expect(resolvedVersionSatisfies("2.0.0", "^1.2.0")).toBe(false);
+  });
+
+  it("invokes a real npm CLI rather than npm_execpath", () => {
+    const source = readFileSync(
+      join(process.cwd(), "scripts", "release-packages.mjs"),
+      "utf8",
+    );
+    expect(source).toMatch(/function runNpm\(/u);
+    expect(source).not.toMatch(/process\.env\.npm_execpath/u);
   });
 
   it("requires the release tag to match a public package version", async () => {
@@ -172,8 +300,12 @@ describe("release source authentication", () => {
     expect(header).not.toContain("id-token: write");
     expect(prepare).not.toContain("id-token: write");
     expect(publish).toContain("id-token: write");
+    expect(prepare).toContain("pnpm install --frozen-lockfile");
+    expect(prepare).not.toContain("npm ci");
     expect(publish).not.toContain("npm ci");
     expect(publish).not.toContain("npm install");
+    expect(publish).not.toContain("pnpm install");
+    expect(publish).not.toContain("corepack");
     expect(publish).toContain("npm run release:publish");
     expect(workflow).not.toContain("workflow_dispatch");
     expect(workflow).toContain("retention-days: 30");
@@ -199,16 +331,14 @@ describe("release source authentication", () => {
 
   it("installs the reviewed npm release from a digest-pinned tarball", () => {
     const { prepare } = publishWorkflowJobs();
-    const { packageManager } = JSON.parse(
-      readFileSync(join(process.cwd(), "package.json"), "utf8"),
-    ) as { packageManager: string };
-    const version = packageManager.replace(/^npm@/u, "");
-    expect(prepare).toContain(`NPM_VERSION: ${version}`);
+    expect(prepare).toContain(`NPM_VERSION: ${REVIEWED_NPM_VERSION}`);
     expect(prepare).toContain(
       "NPM_INTEGRITY: sha512-T67M4L5wNm0cZ7EBLErcEkY1SmzEW/WJ+SADBzsFUY1UdAPfFHXFQtZ6SEXiK0+vzXysCvAsepbMaBTwnrAD+w==",
     );
     expect(prepare).toContain('npm install --global "${tarball}"');
-    expect(prepare).not.toContain(`npm install --global npm@${version}`);
+    expect(prepare).not.toContain(
+      `npm install --global npm@${REVIEWED_NPM_VERSION}`,
+    );
   });
 });
 

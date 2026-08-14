@@ -41,6 +41,20 @@ forwards each call to every sink. Both reference hosts tee Datadog beside
 their primary sink (App Insights on RetireGolden, Cloudflare Logs on
 pegma.dev) — Spine never learns about either vendor.
 
+## Development
+
+Requires Node.js 22 or newer. Stock Node 22/24 ships Corepack but not a
+`pnpm` shim. Node 25+ does not bundle Corepack; install it first.
+
+```sh
+npm install -g corepack
+corepack enable
+pnpm install
+pnpm run format:check
+pnpm run check
+pnpm test
+```
+
 ## License
 
 MIT © RetireGolden, LLC

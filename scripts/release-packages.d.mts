@@ -36,7 +36,35 @@ export interface ValidationResult {
   readonly releaseTag: string | undefined;
 }
 
+export interface PnpmLockfileDependency {
+  readonly specifier: string;
+  readonly version: string;
+}
+
+export type PnpmLockfileImporters = Record<
+  string,
+  Record<string, Record<string, PnpmLockfileDependency>>
+>;
+
+export const REVIEWED_NPM_VERSION: string;
+export const REVIEWED_PNPM_VERSION: string;
+export const REVIEWED_PNPM_PACKAGE_MANAGER: string;
 export const RELEASE_PACKAGES: readonly ReleasePackageDefinition[];
+
+export function parsePnpmLockfileImporters(text: string): PnpmLockfileImporters;
+
+export function lockResolvedVersion(version: string): string;
+
+export function resolvedVersionSatisfies(
+  version: string,
+  specifier: string,
+): boolean;
+
+export function lockDependencyMatches(
+  lockDependency: PnpmLockfileDependency | undefined,
+  specifier: string,
+  options?: { readonly workspace?: boolean },
+): boolean;
 
 export function parseArguments(
   arguments_: readonly string[],

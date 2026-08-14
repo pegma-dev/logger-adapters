@@ -60,7 +60,7 @@ vendor-specific surplus.
 ## Workflow
 
 Work on a `claude/*` branch and open a pull request. The gate is
-`npm run format:check`, `npm run check`, `npm test` on Node 22 and 24.
+`pnpm run format:check`, `pnpm run check`, `pnpm test` on Node 22 and 24.
 
 Publishing is trusted-publisher only; no tokens exist. Follow
 `docs/RELEASING.md`: create and push a signed annotated version tag already on
